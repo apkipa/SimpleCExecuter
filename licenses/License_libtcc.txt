@@ -1,0 +1,4 @@
+TCC is distributed under the GNU Lesser General Public License (see
+COPYING file).
+
+Fabrice Bellard.
