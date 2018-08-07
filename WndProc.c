@@ -2,6 +2,7 @@
 
 #include <Windows.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 
 #include "Scintilla.h"
@@ -10,10 +11,8 @@
 
 #include "public.h"
 
-#pragma comment(lib, "Imm32.lib")
-
 #define CODE_EDITOR_ID 101
-#define CONSOLE_ID	102	//NOTE: Console may be realized with AllocConsole()
+#define CONSOLE_ID	102	//NOTE: Console is realized with AllocConsole()
 
 #define OPERATION_BUTTON_WIDTH 60
 #define OPERATION_BAR_HEIGHT 30
@@ -72,28 +71,11 @@
 #define SYSMENU_RADIO_CODEPAGE_END SYSMENU_RADIO_CODEPAGE_SC_GBK
 
 #define SCE_C_BEGIN SCE_C_DEFAULT
-#define SCE_C_END SCE_C_ESCAPESEQUENCE + 10
+#define SCE_C_END SCE_C_ESCAPESEQUENCE
+
+#define SCE_C_INTERNAL_activeMask 0x40	//Found from source code; a mark used internally (maybe)
 
 HMENU menuCodePagePopup;
-
-/*
-#include <stdlib.h>
-#include <stdio.h>
-
-int main(void) {
-	char c;
-
-	printf("Enter a string: ");
-
-	while ((c = getchar()) != '\n') {
-		putchar(c);
-	}
-	putchar('\n');
-	putc('\n', stdout);
-
-	//system("pause");
-}
-*/
 
 static void ExecuteErrorCallback(void *data, const char *str) {
 	MessageBoxA((HWND)data, str, NULL, MB_ICONERROR);
@@ -255,16 +237,40 @@ void RelocateOperationBarButton(HWND hwnd) {
 void WndProc_Create(HWND hwnd, LPCREATESTRUCT lpCreateStruct) {
 	HMENU menuSystem;
 	HWND hwEditor;
+	COLORREF clr;
 
 	hwEditor = CreateWindow(L"Scintilla", NULL, WS_CHILD | WS_VISIBLE, 0, 0, 100, 100, hwnd, (HMENU)CODE_EDITOR_ID, lpCreateStruct->hInstance, NULL);
 	SendMessage(hwEditor, SCI_SETLEXER, SCLEX_CPP, 0);
-	for (int i = SCE_C_BEGIN; i <= SCE_C_END; i++) {
-		SendMessage(hwEditor, SCI_STYLESETFONT, i, (LPARAM)"FixedSys");
-	}
-	SendMessage(hwEditor, SCI_SETTABWIDTH, 4, 0);
+	for (int i = SCE_C_BEGIN; i <= SCE_C_END; i++)
+		SendMessage(hwEditor, SCI_STYLESETFONT, i, (LPARAM)"Fixedsys");
+
 	//SendMessage(hwEditor, SCI_STYLESETFONT, SCE_C_DEFAULT, (LPARAM)"Courier New");
 	SendMessage(hwEditor, SCI_STYLESETFORE, SCE_C_WORD, RGB(0, 0, 255));
-	//SendMessage(hwEditor, SCI_STYLESETFORE, SCE_C_PREPROCESSOR, RGB(0, 0, 255));
+	SendMessage(hwEditor, SCI_STYLESETFORE, SCE_C_PREPROCESSOR, RGB(128, 128, 128));
+	SendMessage(hwEditor, SCI_STYLESETFORE, SCE_C_COMMENT, RGB(0, 128, 0));
+	SendMessage(hwEditor, SCI_STYLESETFORE, SCE_C_COMMENTLINE, RGB(0, 128, 0));
+	SendMessage(hwEditor, SCI_STYLESETFORE, SCE_C_COMMENTDOC, RGB(0, 100, 0));
+	SendMessage(hwEditor, SCI_STYLESETFORE, SCE_C_COMMENTLINEDOC, RGB(0, 100, 0));
+	SendMessage(hwEditor, SCI_STYLESETFORE, SCE_C_STRING, RGB(163, 21, 21));
+	SendMessage(hwEditor, SCI_STYLESETFORE, SCE_C_CHARACTER, RGB(163, 21, 21));
+
+	for (int i = (SCE_C_BEGIN | SCE_C_INTERNAL_activeMask); i <= (SCE_C_END | SCE_C_INTERNAL_activeMask); i++) {
+		SendMessage(hwEditor, SCI_STYLESETFONT, i, (LPARAM)"Fixedsys");
+		clr = (COLORREF)SendMessage(hwEditor, SCI_STYLEGETFORE, i & ~SCE_C_INTERNAL_activeMask, 0);
+		SendMessage(hwEditor, SCI_STYLESETFORE, i, ColorBlend(RGB(255, 255, 255), clr, 130));
+	}
+	
+	SendMessage(hwEditor, SCI_SETCARETLINEVISIBLE, true, 0);
+	SendMessage(hwEditor, SCI_SETCARETLINEBACK, RGB(234, 234, 242), 0);
+	SendMessage(hwEditor, SCI_SETCARETLINEFRAME, 2, 0);
+
+	SendMessage(hwEditor, SCI_SETSELBACK, true, RGB(173, 214, 255));
+
+	SendMessage(hwEditor, SCI_STYLESETFONT, STYLE_BRACELIGHT, (LPARAM)"Fixedsys");
+	SendMessage(hwEditor, SCI_STYLESETBACK, STYLE_BRACELIGHT, RGB(226, 230, 214));
+	//SendMessage(hwEditor, SCI_STYLESETBACK, STYLE_BRACEBAD, RGB(255, 0, 0));
+
+	//SendMessage(hwEditor, SCI_SETTABWIDTH, 4, 0);
 
 	SendMessage(
 		hwEditor,
@@ -275,7 +281,9 @@ void WndProc_Create(HWND hwnd, LPCREATESTRUCT lpCreateStruct) {
 		"int8_t int16_t int32_t int64_t uint8_t uint16_t uint32_t uint64_t intmax_t uintmax_t intptr_t uintptr_t "
 		"int_fast8_t int_fast16_t int_fast32_t int_fast64_t uint_fast8_t uint_fast16_t uint_fast32_t uint_fast64_t "
 		"int_least8_t int_least16_t int_least32_t int_least64_t uint_least8_t uint_least16_t uint_least32_t uint_least64_t "
-		"size_t ssize_t ptrdiff_t clock_t va_list struct enum union"
+		"size_t ssize_t ptrdiff_t clock_t va_list struct enum union "
+		"do while for if else return inline continue case asm __asm __asm__ volatile __volatile __volatile__ typeof sizeof "
+		"typedef goto switch break restrict extern true false "
 	);
 
 	SendMessage(hwEditor, SCI_SETMARGINTYPEN, 0, SC_MARGIN_NUMBER);
@@ -398,9 +406,13 @@ void WndProc_Size(HWND hwnd, int nResizingRequested, int nClientWidth, int nClie
 
 void WndProc_Notify(HWND hwnd, int nIdCommon, NMHDR *pNmhdr) {
 	int nLinenumOriginalWidth, nLinenumCalculatedWidth;
+	SCNotification *pScintillaNotification;
+	size_t nCurPos, nLastPos, nNextPos;
 	char strBuffer[16];
 
 	if (pNmhdr->idFrom == CODE_EDITOR_ID) {
+		pScintillaNotification = (SCNotification*)pNmhdr;
+
 		switch (pNmhdr->code) {
 		case SCN_MODIFIED:
 		case SCN_ZOOM:
@@ -410,8 +422,27 @@ void WndProc_Notify(HWND hwnd, int nIdCommon, NMHDR *pNmhdr) {
 			if (nLinenumOriginalWidth != nLinenumCalculatedWidth)
 				SendMessage(pNmhdr->hwndFrom, SCI_SETMARGINWIDTHN, 0, (LPARAM)nLinenumCalculatedWidth);
 			break;
+		case SCN_UPDATEUI:
+			if (pScintillaNotification->updated & SC_UPDATE_SELECTION) {
+				nLastPos = (size_t)SendMessage(pNmhdr->hwndFrom, SCI_GETSELECTIONSTART, 0, 0);
+				nCurPos = (size_t)SendMessage(pNmhdr->hwndFrom, SCI_GETANCHOR, 0, 0);
+				nNextPos = (size_t)SendMessage(pNmhdr->hwndFrom, SCI_BRACEMATCH, nCurPos, 0);
+				if (nNextPos != -1) {
+					SendMessage(pNmhdr->hwndFrom, SCI_BRACEHIGHLIGHT, nCurPos, nNextPos);
+				}
+				else {
+					SendMessage(pNmhdr->hwndFrom, SCI_BRACEBADLIGHT, INVALID_POSITION, 0);
+				}
+
+				SendMessage(pNmhdr->hwndFrom, SCI_SETCARETLINEVISIBLE, nLastPos == (size_t)SendMessage(pNmhdr->hwndFrom, SCI_GETSELECTIONEND, 0, 0), 0);
+			}
+			break;
 		}
 	}
+}
+
+void WndProc_SetFocus(HWND hwnd, HWND hwndLostFocus) {
+	SetFocus(GetDlgItem(hwnd, CODE_EDITOR_ID));
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -433,6 +464,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		break;
 	case WM_NOTIFY:
 		WndProc_Notify(hwnd, (int)wParam, (NMHDR*)lParam);
+		break;
+	case WM_SETFOCUS:
+		WndProc_SetFocus(hwnd, (HWND)wParam);
 		break;
 	}
 

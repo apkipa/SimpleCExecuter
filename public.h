@@ -110,3 +110,18 @@ int static inline GetDigitCount(unsigned n) {
 		return 9;
 	return 10;	//Maximum digit count which unsigned 32-bit could reach
 }
+
+COLORREF static inline ColorBlend(COLORREF clr1, COLORREF clr2, uint8_t nClr1Weight) {
+	//Normal version; faster one may be implemented by compiler or others
+	register uint8_t r, g, b, r1, g1, b1, r2, g2, b2;
+	r1 = GetRValue(clr1);
+	g1 = GetGValue(clr1);
+	b1 = GetBValue(clr1);
+	r2 = GetRValue(clr2);
+	g2 = GetGValue(clr2);
+	b2 = GetBValue(clr2);
+	r = (uint8_t)((r1 * nClr1Weight + r2 * (255 - nClr1Weight)) / 255);
+	g = (uint8_t)((g1 * nClr1Weight + g2 * (255 - nClr1Weight)) / 255);
+	b = (uint8_t)((b1 * nClr1Weight + b2 * (255 - nClr1Weight)) / 255);
+	return RGB(r, g, b);
+}
