@@ -3,7 +3,16 @@
 #define TEXT_LANGUAGE_ID_CHINESE 1
 #define TEXT_LANGUAGE_ID_ENGLISH 2
 
+#define OSFD_TYPE_OPEN 1
+#define OSFD_TYPE_SAVE 2
+#define OSFD_RET_SUCCEEDED 1
+#define OSFD_RET_USERCANCELLED 0
+#define OSFD_RET_FAILED -1
+
 typedef int(*PtrFuncType_main)(int argc, char *argv[]);
+typedef int(*PtrFuncType_wmain)(int argc, wchar_t *argv[]);
+typedef int(WINAPI*PtrFuncType_WinMain)(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow);
+typedef int(WINAPI*PtrFuncType_wWinMain)(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLine, int nCmdShow);
 
 typedef struct tagSeparateMode_SharedData {
 	size_t nStructureSize;
@@ -16,6 +25,15 @@ typedef struct tagSeparateMode_SharedData {
 
 	char code[];
 } SeparateMode_SharedData, *pSeparateMode_SharedData;
+
+typedef struct tagUserSpace_EntryPoints {
+	union {
+		PtrFuncType_main UserSpace_main;
+		PtrFuncType_wmain UserSpace_wmain;	//Not supported
+		PtrFuncType_WinMain UserSpace_WinMain;
+		PtrFuncType_wWinMain UserSpace_wWinMain;	//Not supported
+	};
+} UserSpace_EntryPoints, *pUserSpace_EntryPoints;
 
 #define UserSpace_FileStructureSize 32
 #define UserSpace_FileStructureReplace(_Stream) (		\
@@ -124,4 +142,44 @@ COLORREF static inline ColorBlend(COLORREF clr1, COLORREF clr2, uint8_t nClr1Wei
 	g = (uint8_t)((g1 * nClr1Weight + g2 * (255 - nClr1Weight)) / 255);
 	b = (uint8_t)((b1 * nClr1Weight + b2 * (255 - nClr1Weight)) / 255);
 	return RGB(r, g, b);
+}
+
+void static inline InitStdConsole(void) {
+	AllocConsole();
+	freopen("CONIN$", "r+t", stdin);
+	freopen("CONOUT$", "w+t", stdout);
+	freopen("CONOUT$", "w+t", stderr);
+}
+
+void static inline UninitStdConsole(void) {
+	fclose(stderr);
+	fclose(stdout);
+	fclose(stdin);
+	FreeConsole();
+}
+
+int static inline OpenSelectFileDlg(HWND hwParent, wchar_t *str, size_t nStrLen, uint32_t nFlags) {
+	OPENFILENAME ofn = { 0 };
+	bool bRet;
+
+	if ((nFlags & OSFD_TYPE_OPEN) && (nFlags & OSFD_TYPE_SAVE))
+		return OSFD_RET_FAILED;
+
+	str[0] = L'\0';
+	ofn.lStructSize = sizeof(OPENFILENAMEA);
+	ofn.lpstrFilter = L"All files\0*.*\0";
+	ofn.lpstrFile = str;
+	ofn.nMaxFile = nStrLen;
+
+	if (nFlags & OSFD_TYPE_OPEN)
+		bRet = (bool)GetOpenFileName(&ofn);
+	if (nFlags & OSFD_TYPE_SAVE)
+		bRet = (bool)GetSaveFileName(&ofn);
+
+	if (bRet) {
+		return OSFD_RET_SUCCEEDED;
+	}
+	else {
+		return CommDlgExtendedError() == 0 ? OSFD_RET_USERCANCELLED : OSFD_RET_FAILED;
+	}
 }

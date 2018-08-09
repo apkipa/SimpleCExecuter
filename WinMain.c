@@ -61,9 +61,11 @@ static void ExecuteErrorCallback(void *data, const char *str) {
 
 bool RunSeparatedCode(wchar_t strSharedMemoryName[128], int *nRet) {
 	pSeparateMode_SharedData pShared;
-	PtrFuncType_main UserSpace_main;
+	//PtrFuncType_main UserSpace_main;
+	UserSpace_EntryPoints eps;
 	bool bConsoleAutoPause;
 	HANDLE hSharedMemory;
+	bool bUseConsole;
 	TCCState *pState;
 	HWND hwnd;
 
@@ -84,6 +86,7 @@ bool RunSeparatedCode(wchar_t strSharedMemoryName[128], int *nRet) {
 
 	pShared->bReceived = true;
 	hwnd = pShared->hwnd;
+	bUseConsole = pShared->bUseConsole;
 	bConsoleAutoPause = pShared->bConsoleAutoPause;
 
 	pState = tcc_new();
@@ -111,6 +114,53 @@ bool RunSeparatedCode(wchar_t strSharedMemoryName[128], int *nRet) {
 
 	TccLibFuncInject_Late(pState);
 
+	if (bUseConsole) {
+		eps.UserSpace_main = (PtrFuncType_main)tcc_get_symbol(pState, "main");
+		if (eps.UserSpace_main == NULL) {
+			ExecuteErrorCallback(hwnd, "Cannot locate entry point \"main\" in program \"main.exe\".");
+			tcc_delete(pState);
+			return false;
+		}
+
+		InitStdConsole();
+
+		__try {
+			*nRet = eps.UserSpace_main(1, (char*[]) { "main.exe" });
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			ExecuteErrorCallback(hwnd, "A fatal error occured during program execution. The program has been stopped.");
+
+			UninitStdConsole();
+
+			tcc_delete(pState);
+			return false;
+		}
+
+		if (bConsoleAutoPause)
+			system("pause");
+
+		UninitStdConsole();
+	}
+	else {
+		eps.UserSpace_WinMain = (PtrFuncType_WinMain)tcc_get_symbol(pState, "_WinMain@16");
+		if (eps.UserSpace_WinMain == NULL) {
+			ExecuteErrorCallback(hwnd, "Cannot locate entry point \"WinMain\" in program \"main.exe\".");
+			tcc_delete(pState);
+			return false;
+		}
+
+		__try {
+			*nRet = eps.UserSpace_WinMain(GetModuleHandle(NULL), NULL, (char[1]) { "" }, SW_NORMAL);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			ExecuteErrorCallback(hwnd, "A fatal error occured during program execution. The program has been stopped.");
+
+			tcc_delete(pState);
+			return false;
+		}
+	}
+
+	/*
 	UserSpace_main = (PtrFuncType_main)tcc_get_symbol(pState, "main");
 	if (UserSpace_main == NULL) {
 		ExecuteErrorCallback(hwnd, "Cannot locate entry point \"main\" in program \"main.exe\".");
@@ -148,6 +198,7 @@ bool RunSeparatedCode(wchar_t strSharedMemoryName[128], int *nRet) {
 	fclose(stdout);
 	fclose(stdin);
 	FreeConsole();
+	*/
 
 	tcc_delete(pState);
 	return true;

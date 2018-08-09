@@ -18,8 +18,10 @@
 #define OPERATION_BAR_HEIGHT 30
 
 #define OPERATION_BUTTON_RUN 1
-#define OPERATION_BUTTON_INFO 3
-#define OPERATION_BUTTON_LAST 3
+#define OPERATION_BUTTON_OPEN 2
+#define OPERATION_BUTTON_SAVE 3
+#define OPERATION_BUTTON_INFO 5
+#define OPERATION_BUTTON_LAST 5
 
 #define SYSMENU_CHECK_USE_CONSOLE (1 << 4)
 #define SYSMENU_CHECK_SEPARATE_MODE (2 << 4)
@@ -33,6 +35,8 @@
 #if (TEXT_LANGUAGE_ID == TEXT_LANGUAGE_ID_CHINESE)
 #define OPERATION_BUTTON_RUN_TEXT L"运行"
 #define OPERATION_BUTTON_INFO_TEXT L"关于"
+#define OPERATION_BUTTON_OPEN_TEXT L"打开..."
+#define OPERATION_BUTTON_SAVE_TEXT L"保存..."
 
 #define SYSMENU_CHECK_USE_CONSOLE_TEXT L"模拟控制台环境 (取消勾选以模拟 GUI 环境)"
 #define SYSMENU_CHECK_SEPARATE_MODE_TEXT L"分离模式 (在一个新建实例中运行代码，略微降低性能)"
@@ -49,6 +53,8 @@
 #elif (TEXT_LANGUAGE_ID == TEXT_LANGUAGE_ID_ENGLISH)
 #define OPERATION_BUTTON_RUN_TEXT L"Execute"
 #define OPERATION_BUTTON_INFO_TEXT L"Info"
+#define OPERATION_BUTTON_OPEN_TEXT L"Open..."
+#define OPERATION_BUTTON_SAVE_TEXT L"Save..."
 
 #define SYSMENU_CHECK_USE_CONSOLE_TEXT L"Emulate console environment (Untick to emulate GUI environment)"
 #define SYSMENU_CHECK_SEPARATE_MODE_TEXT L"Separate mode (Run code in a new instance, slightly reduce performance)"
@@ -82,51 +88,46 @@ static void ExecuteErrorCallback(void *data, const char *str) {
 }
 
 bool RunStringCode_Direct(HWND hwnd, char *str, bool bUseConsole, bool bConsoleAutoPause) {
-	PtrFuncType_main UserSpace_main;
+	UserSpace_EntryPoints eps;
+	//PtrFuncType_main UserSpace_main;
 	TCCState *pState;
 	//int nRet;
 
+	pState = tcc_new();
+	if (pState == NULL)
+		return false;
+
+	tcc_set_error_func(pState, hwnd, ExecuteErrorCallback);
+	tcc_add_sysinclude_path(pState, "tcc/include");
+	tcc_add_sysinclude_path(pState, "tcc/include/winapi");
+	tcc_add_library_path(pState, "tcc/lib");
+	TccLibFuncInject_Early(pState);
+
+	tcc_set_output_type(pState, TCC_OUTPUT_MEMORY);
+	if (tcc_compile_string(pState, str) == -1 || tcc_relocate(pState, TCC_RELOCATE_AUTO) < 0) {
+		tcc_delete(pState);
+		return false;
+	}
+
+	TccLibFuncInject_Late(pState);
+
 	if (bUseConsole) {
-		pState = tcc_new();
-		if (pState == NULL)
-			return false;
-
-		tcc_set_error_func(pState, hwnd, ExecuteErrorCallback);
-		tcc_add_sysinclude_path(pState, "tcc/include");
-		tcc_add_sysinclude_path(pState, "tcc/include/winapi");
-		tcc_add_library_path(pState, "tcc/lib");
-		TccLibFuncInject_Early(pState);
-
-		tcc_set_output_type(pState, TCC_OUTPUT_MEMORY);
-		if (tcc_compile_string(pState, str) == -1 || tcc_relocate(pState, TCC_RELOCATE_AUTO) < 0) {
-			tcc_delete(pState);
-			return false;
-		}
-
-		TccLibFuncInject_Late(pState);
-
-		UserSpace_main = (PtrFuncType_main)tcc_get_symbol(pState, "main");
-		if (UserSpace_main == NULL) {
+		eps.UserSpace_main = (PtrFuncType_main)tcc_get_symbol(pState, "main");
+		if (eps.UserSpace_main == NULL) {
 			ExecuteErrorCallback(hwnd, "Cannot locate entry point \"main\" in program \"main.exe\".");
 			tcc_delete(pState);
 			return false;
 		}
 
-		AllocConsole();
-		freopen("CONIN$", "r+t", stdin);
-		freopen("CONOUT$", "w+t", stdout);
-		freopen("CONOUT$", "w+t", stderr);
+		InitStdConsole();
 
 		__try {
-			UserSpace_main(1, (char*[]) { "main.exe" });
+			eps.UserSpace_main(1, (char*[]) { "main.exe" });
 		}
 		__except (EXCEPTION_EXECUTE_HANDLER) {
 			ExecuteErrorCallback(hwnd, "A fatal error occured during program execution. The program has been stopped.");
 
-			fclose(stderr);
-			fclose(stdout);
-			fclose(stdin);
-			FreeConsole();
+			UninitStdConsole();
 
 			tcc_delete(pState);
 			return false;
@@ -135,17 +136,28 @@ bool RunStringCode_Direct(HWND hwnd, char *str, bool bUseConsole, bool bConsoleA
 		if (bConsoleAutoPause)
 			system("pause");
 
-		fclose(stderr);
-		fclose(stdout);
-		fclose(stdin);
-		FreeConsole();
-
-		tcc_delete(pState);
+		UninitStdConsole();
 	}
 	else {
+		eps.UserSpace_WinMain = (PtrFuncType_WinMain)tcc_get_symbol(pState, "_WinMain@16");
+		if (eps.UserSpace_WinMain == NULL) {
+			ExecuteErrorCallback(hwnd, "Cannot locate entry point \"WinMain\" in program \"main.exe\".");
+			tcc_delete(pState);
+			return false;
+		}
 
+		__try {
+			eps.UserSpace_WinMain(GetModuleHandle(NULL), NULL, (char[1]) { "" }, SW_NORMAL);
+		}
+		__except (EXCEPTION_EXECUTE_HANDLER) {
+			ExecuteErrorCallback(hwnd, "A fatal error occured during program execution. The program has been stopped.");
+
+			tcc_delete(pState);
+			return false;
+		}
 	}
 
+	tcc_delete(pState);
 	return true;
 }
 
@@ -210,6 +222,8 @@ bool RunStringCode(HWND hwnd, char *str, bool bUseConsole, bool bSeparated, bool
 void AddOperationBarButton(HWND hwnd, HINSTANCE hInstance, int id) {
 	static wchar_t *btnNameList[] = {
 		[OPERATION_BUTTON_RUN] = OPERATION_BUTTON_RUN_TEXT,
+		[OPERATION_BUTTON_OPEN] = OPERATION_BUTTON_OPEN_TEXT,
+		[OPERATION_BUTTON_SAVE] = OPERATION_BUTTON_SAVE_TEXT,
 		[OPERATION_BUTTON_INFO] = OPERATION_BUTTON_INFO_TEXT
 	};
 	RECT rtClient;
@@ -292,6 +306,8 @@ void WndProc_Create(HWND hwnd, LPCREATESTRUCT lpCreateStruct) {
 	//SendMessage(hwEditor, SCI_SETCODEPAGE, 936, 0);
 
 	AddOperationBarButton(hwnd, lpCreateStruct->hInstance, OPERATION_BUTTON_RUN);
+	AddOperationBarButton(hwnd, lpCreateStruct->hInstance, OPERATION_BUTTON_OPEN);
+	AddOperationBarButton(hwnd, lpCreateStruct->hInstance, OPERATION_BUTTON_SAVE);
 	AddOperationBarButton(hwnd, lpCreateStruct->hInstance, OPERATION_BUTTON_INFO);
 
 	menuCodePagePopup = CreatePopupMenu();
@@ -342,6 +358,84 @@ void WndProc_Command_OperationButton_Run(HWND hwnd, int nControlNotificationCode
 	free(str);
 }
 
+void WndProc_Command_OperationButton_Open(HWND hwnd, int nControlNotificationCode, HWND hwControl) {
+	wchar_t strPath[MAX_PATH];
+	char strBuffer[1024];
+	HWND hwEditor;
+	size_t nRet;
+	FILE *fp;
+
+	switch (OpenSelectFileDlg(hwnd, strPath, MAX_PATH, OSFD_TYPE_OPEN)) {
+	case OSFD_RET_SUCCEEDED:
+		fp = _wfopen(strPath, L"rb");
+		if (fp == NULL) {
+			ExecuteErrorCallback(hwnd, "Cannot open specified file.");
+			return;
+		}
+
+		hwEditor = GetDlgItem(hwnd, CODE_EDITOR_ID);
+
+		SendMessage(hwEditor, SCI_CLEARALL, 0, 0);
+		nRet = fread(strBuffer, sizeof(char), 1024, fp);
+		while (nRet > 0) {
+			SendMessage(hwEditor, SCI_APPENDTEXT, nRet, (LPARAM)strBuffer);
+			nRet = fread(strBuffer, sizeof(char), 1024, fp);
+		}
+
+		fclose(fp);
+		break;
+	case OSFD_RET_FAILED:
+		ExecuteErrorCallback(hwnd, "An error occurred when opening file dialog.");
+		break;
+	}
+}
+
+void WndProc_Command_OperationButton_Save(HWND hwnd, int nControlNotificationCode, HWND hwControl) {
+	struct Sci_TextRange sciTr;
+	wchar_t strPath[MAX_PATH];
+	char strBuffer[1024 + 1];
+	size_t nTimes, nRest;
+	size_t nCount;
+	HWND hwEditor;
+	FILE *fp;
+
+	switch (OpenSelectFileDlg(hwnd, strPath, MAX_PATH, OSFD_TYPE_SAVE)) {
+	case OSFD_RET_SUCCEEDED:
+		fp = _wfopen(strPath, L"wb");
+		if (fp == NULL) {
+			ExecuteErrorCallback(hwnd, "Cannot open specified file.");
+			return;
+		}
+
+		hwEditor = GetDlgItem(hwnd, CODE_EDITOR_ID);
+
+		nCount = (size_t)SendMessage(hwEditor, SCI_GETLENGTH, 0, 0);
+		nTimes = nCount / 1024;
+		nRest = nCount % 1024;
+
+		//NOTE: CharRange: [cpMin, cpMax)
+		sciTr.chrg.cpMin = 0;
+		sciTr.chrg.cpMax = 1024;
+		sciTr.lpstrText = strBuffer;
+		for (size_t i = 0; i < nTimes; i++) {
+			//ExecuteErrorCallback(hwnd, "test");
+			SendMessage(hwEditor, SCI_GETTEXTRANGE, 0, (LPARAM)&sciTr);
+			fwrite(strBuffer, sizeof(char), 1024, fp);
+			sciTr.chrg.cpMin += 1024;
+			sciTr.chrg.cpMax += 1024;
+		}
+		sciTr.chrg.cpMax = sciTr.chrg.cpMin + nRest;
+		SendMessage(hwEditor, SCI_GETTEXTRANGE, 0, (LPARAM)&sciTr);
+		fwrite(strBuffer, sizeof(char), nRest, fp);
+
+		fclose(fp);
+		break;
+	case OSFD_RET_FAILED:
+		ExecuteErrorCallback(hwnd, "An error occurred when opening file dialog.");
+		break;
+	}
+}
+
 void WndProc_Command_OperationButton_Info(HWND hwnd, int nControlNotificationCode, HWND hwControl) {
 	MessageBox(hwnd, PROGRAM_INFO_TEXT, ABOUT_TEXT, MB_ICONINFORMATION);
 }
@@ -350,6 +444,12 @@ void WndProc_Command(HWND hwnd, int nControlId, int nControlNotificationCode, HW
 	switch (nControlId) {
 	case OPERATION_BUTTON_RUN:
 		WndProc_Command_OperationButton_Run(hwnd, nControlNotificationCode, hwControl);
+		break;
+	case OPERATION_BUTTON_OPEN:
+		WndProc_Command_OperationButton_Open(hwnd, nControlNotificationCode, hwControl);
+		break;
+	case OPERATION_BUTTON_SAVE:
+		WndProc_Command_OperationButton_Save(hwnd, nControlNotificationCode, hwControl);
 		break;
 	case OPERATION_BUTTON_INFO:
 		WndProc_Command_OperationButton_Info(hwnd, nControlNotificationCode, hwControl);
