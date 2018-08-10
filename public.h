@@ -170,6 +170,7 @@ int static inline OpenSelectFileDlg(HWND hwParent, wchar_t *str, size_t nStrLen,
 	ofn.lpstrFilter = L"All files\0*.*\0";
 	ofn.lpstrFile = str;
 	ofn.nMaxFile = nStrLen;
+	ofn.Flags = OFN_NOCHANGEDIR;
 
 	if (nFlags & OSFD_TYPE_OPEN)
 		bRet = (bool)GetOpenFileName(&ofn);

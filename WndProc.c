@@ -418,7 +418,6 @@ void WndProc_Command_OperationButton_Save(HWND hwnd, int nControlNotificationCod
 		sciTr.chrg.cpMax = 1024;
 		sciTr.lpstrText = strBuffer;
 		for (size_t i = 0; i < nTimes; i++) {
-			//ExecuteErrorCallback(hwnd, "test");
 			SendMessage(hwEditor, SCI_GETTEXTRANGE, 0, (LPARAM)&sciTr);
 			fwrite(strBuffer, sizeof(char), 1024, fp);
 			sciTr.chrg.cpMin += 1024;
