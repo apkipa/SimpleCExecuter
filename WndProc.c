@@ -28,6 +28,7 @@
 #define SYSMENU_CHECK_CONSOLE_AUTO_PAUSE (3 << 4)
 #define SYSMENU_RADIO_CODEPAGE_UTF8 (101 << 4)
 #define SYSMENU_RADIO_CODEPAGE_SC_GBK (102 << 4)
+#define SYSMENU_RADIO_CODEPAGE_JS_JIS (103 << 4)
 
 //Text area - begin
 #define TEXT_LANGUAGE_ID TEXT_LANGUAGE_ID_ENGLISH	//Change this if you want another language
@@ -44,6 +45,7 @@
 #define SYSMENU_RADIO_CODEPAGE_TEXT L"代码页"
 #define SYSMENU_RADIO_CODEPAGE_UTF8_TEXT L"UTF-8"
 #define SYSMENU_RADIO_CODEPAGE_SC_GBK_TEXT L"简体中文 GBK (936)"
+#define SYSMENU_RADIO_CODEPAGE_JS_JIS_TEXT L"日文 Shift-JIS (932)"
 
 #define ABOUT_TEXT L"关于"
 #define PROGRAM_INFO_TEXT L"Simple C Executer\n作者: apkipa\n本程序使用的支持库:\nlibtcc 0.9.2.7\nScintilla 4.1.0"
@@ -62,6 +64,7 @@
 #define SYSMENU_RADIO_CODEPAGE_TEXT L"Code page"
 #define SYSMENU_RADIO_CODEPAGE_UTF8_TEXT L"UTF-8"
 #define SYSMENU_RADIO_CODEPAGE_SC_GBK_TEXT L"Simplified Chinese GBK (936)"
+#define SYSMENU_RADIO_CODEPAGE_JS_JIS_TEXT L"Japanese Shift-JIS (932)"
 
 #define ABOUT_TEXT L"About"
 #define PROGRAM_INFO_TEXT L"Simple C Executer\nAuthor: apkipa\nLibraries used:\nlibtcc 0.9.2.7\nScintilla 4.1.0"
@@ -74,7 +77,7 @@
 //Text area - end
 
 #define SYSMENU_RADIO_CODEPAGE_BEGIN SYSMENU_RADIO_CODEPAGE_UTF8
-#define SYSMENU_RADIO_CODEPAGE_END SYSMENU_RADIO_CODEPAGE_SC_GBK
+#define SYSMENU_RADIO_CODEPAGE_END SYSMENU_RADIO_CODEPAGE_JS_JIS
 
 #define SCE_C_BEGIN SCE_C_DEFAULT
 #define SCE_C_END SCE_C_ESCAPESEQUENCE
@@ -297,7 +300,7 @@ void WndProc_Create(HWND hwnd, LPCREATESTRUCT lpCreateStruct) {
 		"int_least8_t int_least16_t int_least32_t int_least64_t uint_least8_t uint_least16_t uint_least32_t uint_least64_t "
 		"size_t ssize_t ptrdiff_t clock_t va_list struct enum union "
 		"do while for if else return inline continue case asm __asm __asm__ volatile __volatile __volatile__ typeof sizeof "
-		"typedef goto switch break restrict extern true false "
+		"typedef goto switch break default restrict extern true false "
 	);
 
 	SendMessage(hwEditor, SCI_SETMARGINTYPEN, 0, SC_MARGIN_NUMBER);
@@ -313,6 +316,7 @@ void WndProc_Create(HWND hwnd, LPCREATESTRUCT lpCreateStruct) {
 	menuCodePagePopup = CreatePopupMenu();
 	AppendMenu(menuCodePagePopup, MF_STRING | MF_CHECKED | MFT_RADIOCHECK, SYSMENU_RADIO_CODEPAGE_UTF8, SYSMENU_RADIO_CODEPAGE_UTF8_TEXT);
 	AppendMenu(menuCodePagePopup, MF_STRING, SYSMENU_RADIO_CODEPAGE_SC_GBK, SYSMENU_RADIO_CODEPAGE_SC_GBK_TEXT);
+	AppendMenu(menuCodePagePopup, MF_STRING, SYSMENU_RADIO_CODEPAGE_JS_JIS, SYSMENU_RADIO_CODEPAGE_JS_JIS_TEXT);
 	menuSystem = GetSystemMenu(hwnd, false);
 	AppendMenu(menuSystem, MF_SEPARATOR, 0, NULL);
 	AppendMenu(menuSystem, MF_STRING | MF_CHECKED, SYSMENU_CHECK_USE_CONSOLE, SYSMENU_CHECK_USE_CONSOLE_TEXT);
@@ -485,6 +489,7 @@ void WndProc_SystemCommand(HWND hwnd, int nCmdType, int xPos, int yPos) {
 		break;
 	case SYSMENU_RADIO_CODEPAGE_UTF8:
 	case SYSMENU_RADIO_CODEPAGE_SC_GBK:
+	case SYSMENU_RADIO_CODEPAGE_JS_JIS:
 		CheckMenuRadioItem(menuCodePagePopup, SYSMENU_RADIO_CODEPAGE_BEGIN, SYSMENU_RADIO_CODEPAGE_END, nCmdType, MF_BYCOMMAND);
 		switch (nCmdType) {
 		case SYSMENU_RADIO_CODEPAGE_UTF8:
@@ -492,6 +497,10 @@ void WndProc_SystemCommand(HWND hwnd, int nCmdType, int xPos, int yPos) {
 			break;
 		case SYSMENU_RADIO_CODEPAGE_SC_GBK:
 			SendMessage(GetDlgItem(hwnd, CODE_EDITOR_ID), SCI_SETCODEPAGE, 936, 0);
+			break;
+		case SYSMENU_RADIO_CODEPAGE_JS_JIS:
+			SendMessage(GetDlgItem(hwnd, CODE_EDITOR_ID), SCI_SETCODEPAGE, 932, 0);
+			//SendMessage(GetDlgItem(hwnd, CODE_EDITOR_ID), SCI_STYLESETCHARACTERSET, SCE_C_PREPROCESSOR, SC_CHARSET_SHIFTJIS);
 			break;
 		}
 		break;
