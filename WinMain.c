@@ -128,7 +128,7 @@ bool RunSeparatedCode(wchar_t strSharedMemoryName[128], int *nRet) {
 			*nRet = eps.UserSpace_main(1, (char*[]) { "main.exe" });
 		}
 		__except (EXCEPTION_EXECUTE_HANDLER) {
-			ExecuteErrorCallback(hwnd, "A fatal error occured during program execution. The program has been stopped.");
+			ExecuteErrorCallback(hwnd, "A fatal error occurred during program execution. The program has been stopped.");
 
 			UninitStdConsole();
 
@@ -153,7 +153,7 @@ bool RunSeparatedCode(wchar_t strSharedMemoryName[128], int *nRet) {
 			*nRet = eps.UserSpace_WinMain(GetModuleHandle(NULL), NULL, (char[1]) { "" }, SW_NORMAL);
 		}
 		__except (EXCEPTION_EXECUTE_HANDLER) {
-			ExecuteErrorCallback(hwnd, "A fatal error occured during program execution. The program has been stopped.");
+			ExecuteErrorCallback(hwnd, "A fatal error occurred during program execution. The program has been stopped.");
 
 			tcc_delete(pState);
 			return false;
