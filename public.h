@@ -9,6 +9,40 @@
 #define OSFD_RET_USERCANCELLED 0
 #define OSFD_RET_FAILED -1
 
+#define GenerateException() __asm int 3
+
+#define MacroReturnFunc(...) return (__VA_ARGS__)
+
+#define MacroToString_SpawnCase(macro, func) case (macro): func(#macro); break
+#define MacroToWString_SpawnCase(macro, func) case (macro): func(L ## #macro); break
+
+#define ExceptionIdToAnyString_Frame_Switch(funcCase, nExceptionId, funcCaseCallback)	\
+	switch (nId) {																		\
+		funcCase(EXCEPTION_ACCESS_VIOLATION, funcCaseCallback);							\
+		funcCase(EXCEPTION_ARRAY_BOUNDS_EXCEEDED, funcCaseCallback);					\
+		funcCase(EXCEPTION_BREAKPOINT, funcCaseCallback);								\
+		funcCase(EXCEPTION_DATATYPE_MISALIGNMENT, funcCaseCallback);					\
+		funcCase(EXCEPTION_FLT_DENORMAL_OPERAND, funcCaseCallback);						\
+		funcCase(EXCEPTION_FLT_DIVIDE_BY_ZERO, funcCaseCallback);						\
+		funcCase(EXCEPTION_FLT_INEXACT_RESULT, funcCaseCallback);						\
+		funcCase(EXCEPTION_FLT_INVALID_OPERATION, funcCaseCallback);					\
+		funcCase(EXCEPTION_FLT_OVERFLOW, funcCaseCallback);								\
+		funcCase(EXCEPTION_FLT_STACK_CHECK, funcCaseCallback);							\
+		funcCase(EXCEPTION_FLT_UNDERFLOW, funcCaseCallback);							\
+		funcCase(EXCEPTION_GUARD_PAGE, funcCaseCallback);								\
+		funcCase(EXCEPTION_ILLEGAL_INSTRUCTION, funcCaseCallback);						\
+		funcCase(EXCEPTION_IN_PAGE_ERROR, funcCaseCallback);							\
+		funcCase(EXCEPTION_INT_DIVIDE_BY_ZERO, funcCaseCallback);						\
+		funcCase(EXCEPTION_INT_OVERFLOW, funcCaseCallback);								\
+		funcCase(EXCEPTION_INVALID_DISPOSITION, funcCaseCallback);						\
+		funcCase(EXCEPTION_INVALID_HANDLE, funcCaseCallback);							\
+		funcCase(EXCEPTION_NONCONTINUABLE_EXCEPTION, funcCaseCallback);					\
+		funcCase(EXCEPTION_PRIV_INSTRUCTION, funcCaseCallback);							\
+		funcCase(EXCEPTION_SINGLE_STEP, funcCaseCallback);								\
+		funcCase(EXCEPTION_STACK_OVERFLOW, funcCaseCallback);							\
+		funcCase(STATUS_UNWIND_CONSOLIDATE, funcCaseCallback);							\
+	}
+
 typedef int(*PtrFuncType_main)(int argc, char *argv[]);
 typedef int(*PtrFuncType_wmain)(int argc, wchar_t *argv[]);
 typedef int(WINAPI*PtrFuncType_WinMain)(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow);
@@ -49,6 +83,10 @@ typedef struct tagUserSpace_FILE {
 } UserSpace_FILE, *pUserSpace_FILE;
 static UserSpace_FILE(*UserSpace__imp___iob)[3];
 
+static unsigned int UserSpace_sleep(unsigned int seconds) {
+	Sleep(1000 * seconds);
+	return 0;
+}
 static int UserSpace_getc(UserSpace_FILE *_Stream) {
 	return getc(UserSpace_FileStructureReplace(_Stream));
 }
@@ -64,9 +102,30 @@ static int UserSpace_fgetc(UserSpace_FILE *_Stream) {
 static int UserSpace_fputc(int _Character, UserSpace_FILE *_Stream) {
 	return fputc(_Character, UserSpace_FileStructureReplace(_Stream));
 }
-static unsigned int UserSpace_sleep(unsigned int seconds) {
-	Sleep(1000 * seconds);
-	return 0;
+static char* UserSpace_gets(char *str) {
+	if (GetConsoleWindow()) {
+		fprintf(
+			stderr,
+			"%s",
+			"\nSorry, but gets() is no longer available. Please use fgets or gets_s instead. Generating an exception."
+		);
+	}
+	else {
+		MessageBox(
+			GetFocus(),
+			L"Sorry, but gets() is no longer available. Please use fgets or gets_s instead. Generating an exception.",
+			NULL,	
+			MB_ICONERROR
+		);
+	}
+
+	GenerateException();
+}
+static char* UserSpace_fgets(char *_Buffer, int _MaxCount, UserSpace_FILE *_Stream) {
+	return fgets(_Buffer, _MaxCount, UserSpace_FileStructureReplace(_Stream));
+}
+static int UserSpace_fputs(const char *_Buffer, UserSpace_FILE *_Stream) {
+	return fputs(_Buffer, UserSpace_FileStructureReplace(_Stream));
 }
 
 #define TccLibFuncInject_ReplaceSameNameSymbol(pState, name) (tcc_add_symbol(pState, #name, name))
@@ -90,6 +149,9 @@ bool static inline TccLibFuncInject_Early(TCCState *pState) {
 	TccLibFuncInject_ReplaceUserSpaceSymbol(pState, ungetc);
 	TccLibFuncInject_ReplaceUserSpaceSymbol(pState, fgetc);
 	TccLibFuncInject_ReplaceUserSpaceSymbol(pState, fputc);
+	TccLibFuncInject_ReplaceUserSpaceSymbol(pState, gets);
+	TccLibFuncInject_ReplaceUserSpaceSymbol(pState, fgets);
+	TccLibFuncInject_ReplaceUserSpaceSymbol(pState, fputs);
 
 	return true;
 }
@@ -183,4 +245,36 @@ int static inline OpenSelectFileDlg(HWND hwParent, wchar_t *str, size_t nStrLen,
 	else {
 		return CommDlgExtendedError() == 0 ? OSFD_RET_USERCANCELLED : OSFD_RET_FAILED;
 	}
+}
+
+static inline char* tempstrf(const char *strFmt, ...) {
+	static __declspec(thread) char strTemp[1024 * 8];
+	va_list vl;
+
+	va_start(vl, strFmt);
+	vsprintf(strTemp, strFmt, vl);
+	va_end(vl);
+
+	return strTemp;
+}
+
+static inline wchar_t* tempwstrf(const wchar_t *strFmt, ...) {
+	static __declspec(thread) wchar_t strTemp[1024 * 8];
+	va_list vl;
+
+	va_start(vl, strFmt);
+	vswprintf(strTemp, 1024 * 8, strFmt, vl);
+	va_end(vl);
+
+	return strTemp;
+}
+
+static inline char* ExceptionIdToString(uint32_t nId) {
+	ExceptionIdToAnyString_Frame_Switch(MacroToString_SpawnCase, nId, MacroReturnFunc);
+	return NULL;
+}
+
+static inline wchar_t* ExceptionIdToWString(uint32_t nId) {
+	ExceptionIdToAnyString_Frame_Switch(MacroToWString_SpawnCase, nId, MacroReturnFunc);
+	return NULL;
 }
