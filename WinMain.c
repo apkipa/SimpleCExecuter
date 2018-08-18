@@ -55,10 +55,6 @@ int My_CycleMessage(void) {
 	return (int)msg.wParam;
 }
 
-static void ExecuteErrorCallback(void *data, const char *str) {
-	MessageBoxA((HWND)data, str, NULL, MB_ICONERROR);
-}
-
 bool RunSeparatedCode(wchar_t strSharedMemoryName[128], int *nRet) {
 	pSeparateMode_SharedData pShared;
 	//PtrFuncType_main UserSpace_main;
@@ -127,12 +123,8 @@ bool RunSeparatedCode(wchar_t strSharedMemoryName[128], int *nRet) {
 		__try {
 			*nRet = eps.UserSpace_main(1, (char*[]) { "main.exe" });
 		}
-		__except (EXCEPTION_EXECUTE_HANDLER) {
-			//ExecuteErrorCallback(hwnd, "A fatal error occurred during program execution. The program has been stopped.");
-			ExecuteErrorCallback(
-				hwnd,
-				tempstrf("A fatal error occurred during program execution. The program has been stopped. (%s)", ExceptionIdToString(GetExceptionCode()))
-			);
+		__except (SEHExceptionCommonFilter(GetExceptionInformation())) {
+			SEHReportException(hwnd);
 
 			UninitStdConsole();
 
@@ -156,12 +148,8 @@ bool RunSeparatedCode(wchar_t strSharedMemoryName[128], int *nRet) {
 		__try {
 			*nRet = eps.UserSpace_WinMain(GetModuleHandle(NULL), NULL, (char[1]) { "" }, SW_NORMAL);
 		}
-		__except (EXCEPTION_EXECUTE_HANDLER) {
-			//ExecuteErrorCallback(hwnd, "A fatal error occurred during program execution. The program has been stopped.");
-			ExecuteErrorCallback(
-				hwnd,
-				tempstrf("A fatal error occurred during program execution. The program has been stopped. (%s)", ExceptionIdToString(GetExceptionCode()))
-			);
+		__except (SEHExceptionCommonFilter(GetExceptionInformation())) {
+			SEHReportException(hwnd);
 
 			tcc_delete(pState);
 			return false;

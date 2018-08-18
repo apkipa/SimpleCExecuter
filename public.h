@@ -1,5 +1,6 @@
 #pragma once
 
+//NOTE: If you want to modify the language the program uses, go to WndProc.c and find the line that contains #define TEXT_LANGUAGE_ID
 #define TEXT_LANGUAGE_ID_CHINESE 1
 #define TEXT_LANGUAGE_ID_ENGLISH 2
 
@@ -220,6 +221,10 @@ void static inline UninitStdConsole(void) {
 	FreeConsole();
 }
 
+static void ExecuteErrorCallback(void *data, const char *str) {
+	MessageBoxA((HWND)data, str, NULL, MB_ICONERROR);
+}
+
 int static inline OpenSelectFileDlg(HWND hwParent, wchar_t *str, size_t nStrLen, uint32_t nFlags) {
 	OPENFILENAME ofn = { 0 };
 	bool bRet;
@@ -277,4 +282,134 @@ static inline char* ExceptionIdToString(uint32_t nId) {
 static inline wchar_t* ExceptionIdToWString(uint32_t nId) {
 	ExceptionIdToAnyString_Frame_Switch(MacroToWString_SpawnCase, nId, MacroReturnFunc);
 	return NULL;
+}
+
+static inline EXCEPTION_POINTERS* SEHQueryInformationStorage(void) {
+	static __declspec(thread) EXCEPTION_RECORD ExceptionRecord;
+	static __declspec(thread) EXCEPTION_POINTERS Exceptions;
+	static __declspec(thread) CONTEXT ContextRecord;
+	Exceptions.ExceptionRecord = &ExceptionRecord;
+	Exceptions.ContextRecord = &ContextRecord;
+	return &Exceptions;
+}
+
+static inline int SEHExceptionCommonFilter(EXCEPTION_POINTERS *pExceptions) {
+	//*SEHQueryInformationStorage() = *pExceptions;
+	*SEHQueryInformationStorage()->ExceptionRecord = *pExceptions->ExceptionRecord;
+	*SEHQueryInformationStorage()->ContextRecord = *pExceptions->ContextRecord;
+	return EXCEPTION_EXECUTE_HANDLER;
+}
+
+static inline void SEHReportException(void *pData) {
+	char strTemp[1024 * 8];
+	char *strOperation;
+	int nWritten;
+
+	nWritten = sprintf(
+		strTemp,
+		"A fatal error occurred during program execution. The program has been stopped.\n"
+		"\n"
+		"[DEBUG]\n"
+		"Exception type: 0x%08x (%s)\n"
+		"Occurred where: %p\n",
+		SEHQueryInformationStorage()->ExceptionRecord->ExceptionCode,
+		ExceptionIdToString(SEHQueryInformationStorage()->ExceptionRecord->ExceptionCode),
+		SEHQueryInformationStorage()->ExceptionRecord->ExceptionAddress
+	);
+
+	if (SEHQueryInformationStorage()->ExceptionRecord->NumberParameters > 0) {
+		nWritten += sprintf(
+			strTemp + nWritten,
+			"Details:\n"
+		);
+		switch (SEHQueryInformationStorage()->ExceptionRecord->ExceptionCode) {
+		case EXCEPTION_ACCESS_VIOLATION:
+			if (SEHQueryInformationStorage()->ExceptionRecord->NumberParameters == 2) {
+				switch (SEHQueryInformationStorage()->ExceptionRecord->ExceptionInformation[0]) {
+				case 0:
+					strOperation = "read from inaccessible";
+					break;
+				case 1:
+					strOperation = "write to inaccessible";
+					break;
+				case 8:
+					strOperation = "execute at DEP-protected";
+					break;
+				default:
+					strOperation = "do something unknown at";
+					break;
+				}
+				nWritten += sprintf(
+					strTemp + nWritten,
+					"The program attempted to %s address %p.\n",
+					strOperation,
+					(void*)SEHQueryInformationStorage()->ExceptionRecord->ExceptionInformation[1]
+				);
+				break;
+			}
+		default:
+			for (unsigned int i = 0; i < SEHQueryInformationStorage()->ExceptionRecord->NumberParameters; i++) {
+				nWritten += sprintf(
+					strTemp + nWritten,
+					"Parameter %u: %08x\n",
+					i,
+					(unsigned)SEHQueryInformationStorage()->ExceptionRecord->ExceptionInformation[i]
+				);
+			}
+			break;
+		}
+	}
+
+	nWritten += sprintf(
+		strTemp + nWritten,
+		"\n"
+		"CPU registers:\n"
+		"EAX = %08X\tEBX = %08X\n"
+		"ECX = %08X\tEDX = %08X\n"
+		"ESI = %08X\tEDI = %08X\n"
+		"EIP = %08X\tESP = %08X\n"
+		"EBP = %08X\tEFL = %08X",
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Eax,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Ebx,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Ecx,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Edx,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Esi,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Edi,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Eip,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Esp,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Ebp,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->EFlags
+	);
+
+	ExecuteErrorCallback(pData, strTemp);
+
+	/*
+	ExecuteErrorCallback(pData, tempstrf(
+		"A fatal error occurred during program execution. The program has been stopped.\n"
+		"\n"
+		"[DEBUG]\n"
+		"Exception type: 0x%08x (%s)\n"
+		"Occurred where: %p\n"
+		"\n"
+		"CPU registers:\n"
+		"EAX = %08X\tEBX = %08X\n"
+		"ECX = %08X\tEDX = %08X\n"
+		"ESI = %08X\tEDI = %08X\n"
+		"EIP = %08X\tESP = %08X\n"
+		"EBP = %08X\tEFL = %08X\n",
+		SEHQueryInformationStorage()->ExceptionRecord->ExceptionCode,
+		ExceptionIdToString(SEHQueryInformationStorage()->ExceptionRecord->ExceptionCode),
+		SEHQueryInformationStorage()->ExceptionRecord->ExceptionAddress,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Eax,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Ebx,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Ecx,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Edx,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Esi,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Edi,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Eip,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Esp,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->Ebp,
+		(unsigned)SEHQueryInformationStorage()->ContextRecord->EFlags
+	));
+	*/
 }
