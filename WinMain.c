@@ -121,7 +121,7 @@ bool RunSeparatedCode(wchar_t strSharedMemoryName[128], int *nRet) {
 		InitStdConsole();
 
 		__try {
-			*nRet = eps.UserSpace_main(1, (char*[]) { "main.exe" });
+			*nRet = eps.UserSpace_main(1, (char*[]) { ModifiableStringLiteral("main.exe") });
 		}
 		__except (SEHExceptionCommonFilter(GetExceptionInformation())) {
 			SEHReportException(hwnd);
@@ -146,7 +146,7 @@ bool RunSeparatedCode(wchar_t strSharedMemoryName[128], int *nRet) {
 		}
 
 		__try {
-			*nRet = eps.UserSpace_WinMain(GetModuleHandle(NULL), NULL, (char[1]) { "" }, SW_NORMAL);
+			*nRet = eps.UserSpace_WinMain(GetModuleHandle(NULL), NULL, ModifiableStringLiteral(""), SW_NORMAL);
 		}
 		__except (SEHExceptionCommonFilter(GetExceptionInformation())) {
 			SEHReportException(hwnd);

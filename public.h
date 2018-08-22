@@ -10,7 +10,11 @@
 #define OSFD_RET_USERCANCELLED 0
 #define OSFD_RET_FAILED -1
 
-#define GenerateException() __asm int 3
+//#define GenerateException() __asm int 3
+#define GenerateException() (DebugBreak())
+
+#define ModifiableStringLiteral(str) ((char[]) { str })
+#define ModifiableWStringLiteral(str) ((wchar_t[]) { str })
 
 #define MacroReturnFunc(...) return (__VA_ARGS__)
 
@@ -121,6 +125,8 @@ static char* UserSpace_gets(char *str) {
 	}
 
 	GenerateException();
+
+	return str;
 }
 static char* UserSpace_fgets(char *_Buffer, int _MaxCount, UserSpace_FILE *_Stream) {
 	return fgets(_Buffer, _MaxCount, UserSpace_FileStructureReplace(_Stream));

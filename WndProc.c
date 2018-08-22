@@ -12,7 +12,7 @@
 #include "public.h"
 
 #define CODE_EDITOR_ID 101
-#define CONSOLE_ID	102	//NOTE: Console is realized with AllocConsole()
+#define CONSOLE_ID 102	//NOTE: Console is realized with AllocConsole()
 
 #define OPERATION_BUTTON_WIDTH 60
 #define OPERATION_BAR_HEIGHT 30
@@ -121,7 +121,7 @@ bool RunStringCode_Direct(HWND hwnd, char *str, bool bUseConsole, bool bConsoleA
 		InitStdConsole();
 
 		__try {
-			eps.UserSpace_main(1, (char*[]) { "main.exe" });
+			eps.UserSpace_main(1, (char*[]) { ModifiableStringLiteral("main.exe") });
 		}
 		__except (SEHExceptionCommonFilter(GetExceptionInformation())) {
 			SEHReportException(hwnd);
@@ -146,7 +146,7 @@ bool RunStringCode_Direct(HWND hwnd, char *str, bool bUseConsole, bool bConsoleA
 		}
 
 		__try {
-			eps.UserSpace_WinMain(GetModuleHandle(NULL), NULL, (char[1]) { "" }, SW_NORMAL);
+			eps.UserSpace_WinMain(GetModuleHandle(NULL), NULL, ModifiableStringLiteral(""), SW_NORMAL);
 		}
 		__except (SEHExceptionCommonFilter(GetExceptionInformation())) {
 			SEHReportException(hwnd);
@@ -290,11 +290,13 @@ void WndProc_Create(HWND hwnd, LPCREATESTRUCT lpCreateStruct) {
 		SCI_SETKEYWORDS,
 		0,
 		(LPARAM)
+		//Types (Including keyword types)
 		"int short float double signed unsigned char long void bool _Bool const static register auto wchar_t "
 		"int8_t int16_t int32_t int64_t uint8_t uint16_t uint32_t uint64_t intmax_t uintmax_t intptr_t uintptr_t "
 		"int_fast8_t int_fast16_t int_fast32_t int_fast64_t uint_fast8_t uint_fast16_t uint_fast32_t uint_fast64_t "
 		"int_least8_t int_least16_t int_least32_t int_least64_t uint_least8_t uint_least16_t uint_least32_t uint_least64_t "
-		"size_t ssize_t ptrdiff_t clock_t va_list struct enum union "
+		"size_t ssize_t ptrdiff_t clock_t time_t fpos_t FILE wint_t off_t off64_t va_list struct enum union "
+		//Keywords
 		"do while for if else return inline continue case asm __asm __asm__ volatile __volatile __volatile__ typeof sizeof "
 		"typedef goto switch break default restrict extern true false "
 	);
